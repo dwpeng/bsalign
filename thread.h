@@ -43,6 +43,7 @@ _result;	\
 #define thread_typeof(tname) (struct tname##_struct)
 
 #define thread_begin_def(tname)	\
+typedef struct tname##_struct tname##_struct;	\
 struct tname##_struct {		\
 	struct tname##_struct *tname##_params;	\
 	struct tname##_struct *tname##_array;	\

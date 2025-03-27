@@ -56,8 +56,8 @@ static const u1i base_bit4_table[256] = {
 
 static const u1i bit4_bit_table[16] = { 4, 0, 1, 4,  2, 4, 4, 4,  3, 4, 4, 4,  4, 4, 4, 4 };
 
-static const char bit_base_table[12] = "ACGTN-acgtn*";
-static const char bit4_base_table[16] = "-ACMGRSVTWYHKDBN";
+static const char bit_base_table[] = "ACGTN-acgtn*";
+static const char bit4_base_table[] = "-ACMGRSVTWYHKDBN";
 
 // u8i = 0|1|2|3|4|5|6|...
 #define bits2bit(bits, off) (((bits)[(off) >> 5] >> (((~(off)) & 0x1FU) << 1)) & 0x03U)

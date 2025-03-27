@@ -91,7 +91,9 @@ typedef long double f8i;
 #define SWAP_TMP
 #define swap_tmp(a, b, t) { t = a; a = b; b = t; }
 #endif
-
+#ifndef typeof
+#define typeof __typeof__
+#endif
 #define swap_var(a, b) { typeof(a) __swap_tmp__ = (a); (a) = (b); (b) = __swap_tmp__; }
 
 #define UNUSED(x) (void)(x)

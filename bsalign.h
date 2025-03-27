@@ -436,6 +436,43 @@ static inline int seqalign_iter_cigars(u4i *cigars, u4i size, u8i *iter_ptr){
 	return -1;
 }
 
+#define pop_aln2cigar(){\
+		do {\
+			if(alns[0][p] == 5){\
+				if(alns[1][p] == 5){\
+					q = 2;\
+					break;\
+				} else {\
+					q = 0;\
+				}\
+			} else if(alns[1][p] == 5){\
+				q = 1;\
+			} else {\
+				break;\
+			}\
+			for(i=1;i<z;i++){\
+				if(alns[q][(p+i)%L] == alns[!q][p]){\
+					alns[q][p] = alns[!q][p];\
+					alns[q][(p+i)%L] = 5;\
+					ret ++;\
+					break;\
+				} else if(alns[q][(p+i)%L] != 5){\
+					break;\
+				}\
+			}\
+		} while(0);\
+		if(q == 2){\
+		} if(alns[0][p] == 5){\
+			cg = _push_cigar_bsalign(cigars, cg, SEQALIGN_CIGAR_D, 1);\
+		} else if(alns[1][p] == 5){\
+			cg = _push_cigar_bsalign(cigars, cg, SEQALIGN_CIGAR_I, 1);\
+		} else {\
+			cg = _push_cigar_bsalign(cigars, cg, SEQALIGN_CIGAR_M, 1);\
+		}\
+		p = (p + 1) % L;\
+		z --;\
+	}
+
 static inline u4i seqalign_left_tidy_cigars(u1i *qseq, u1i *tseq, seqalign_result_t *rs, u4v *cigars){
 	u8i iter;
 	u4i cg, sz, ret;
@@ -451,44 +488,6 @@ static inline u4i seqalign_left_tidy_cigars(u1i *qseq, u1i *tseq, seqalign_resul
 	sz = cigars->size;
 	cg = 0;
 	ret = 0;
-	inline void pop_aln2cigar(){
-		// left tidy
-		do {
-			if(alns[0][p] == 5){
-				if(alns[1][p] == 5){
-					q = 2;
-					break;
-				} else {
-					q = 0;
-				}
-			} else if(alns[1][p] == 5){
-				q = 1;
-			} else {
-				break;
-			}
-			for(i=1;i<z;i++){
-				if(alns[q][(p+i)%L] == alns[!q][p]){
-					alns[q][p] = alns[!q][p];
-					alns[q][(p+i)%L] = 5;
-					ret ++;
-					break;
-				} else if(alns[q][(p+i)%L] != 5){
-					break;
-				}
-			}
-		} while(0);
-		if(q == 2){
-			// skip
-		} if(alns[0][p] == 5){
-			cg = _push_cigar_bsalign(cigars, cg, SEQALIGN_CIGAR_D, 1);
-		} else if(alns[1][p] == 5){
-			cg = _push_cigar_bsalign(cigars, cg, SEQALIGN_CIGAR_I, 1);
-		} else {
-			cg = _push_cigar_bsalign(cigars, cg, SEQALIGN_CIGAR_M, 1);
-		}
-		p = (p + 1) % L;
-		z --;
-	}
 	while((op = seqalign_iter_cigars(cigars->buffer, sz, &iter)) != -1){
 		switch(op){
 			case 0:
@@ -1791,27 +1790,31 @@ static inline seqalign_result_t striped_epi2_seqedit_backtrace(b1i *uts[2], u4i 
 	return rs;
 }
 
-// W <= 63
-// the size of hs[0/1/2] is WORDSIZE * 2
-// NOTE THAT THIS FUNCTION IS UN-FINISHED
-static inline void striped_epi2_seqedit_row_merge(u2i sbegs[2], b1i *us[3][2], b1i *hs[3], u1i W){
-	xint p1, p2, q1, q2, u1, u2, h1, h2, h3, h4;
-	u4i i;
-	b2i ts[3];
-	u1i rs[4][WORDSIZE];
-//#define CHECK_NO_SSE
-#ifdef CHECK_NO_SSE
-#define DEBUG_NO_SSE
-#endif
-#ifdef CHECK_NO_SSE
-	int ds[2][128];
-	memset(ds[0], 0, 128 * sizeof(int));
-	memset(ds[1], 0, 128 * sizeof(int));
-#endif
-	if(W > 63){
-		W = 63;
-	}
-	void striped_seqedit_sum_4bits(u1i *dst, b1i *src){
+#define striped_epi2_seqedit_row_merge_core(shift)do{ \
+		xint MASK, SHFT;\
+		MASK = mm_set1_epi8(1);\
+		SHFT = mm_set1_epi8((unsigned short)(1 << shift));\
+		for(i=0;i<W;i++){\
+			q1 = mm_load(((xint*)us[0][0]) + i);\
+			p1 = mm_load(((xint*)us[0][1]) + i);\
+			h1 = mm_adds_epi8(h1, mm_and(mm_srli_epi64(p1, shift), MASK));\
+			h1 = mm_subs_epi8(h1, mm_and(mm_srli_epi64(q1, shift), MASK));\
+			q2 = mm_load(((xint*)us[1][0]) + i);\
+			p2 = mm_load(((xint*)us[1][1]) + i);\
+			h2 = mm_adds_epi8(h2, mm_and(mm_srli_epi64(p2, shift), MASK));\
+			h2 = mm_subs_epi8(h2, mm_and(mm_srli_epi64(q2, shift), MASK));\
+			h4 = mm_min_epi8(h1, h2);\
+			u1 = mm_load(((xint*)us[2][0]) + i);\
+			u2 = mm_load(((xint*)us[2][1]) + i);\
+			u1 = mm_or(u1, mm_and(mm_cmpgt_epi8(h3, h4), SHFT));\
+			u2 = mm_or(u2, mm_and(mm_cmpgt_epi8(h4, h3), SHFT));\
+			h3 = h4;\
+			mm_store(((xint*)us[2][0]) + i, u1);\
+			mm_store(((xint*)us[2][1]) + i, u2);\
+		}\
+	}while(0)
+
+static inline void striped_seqedit_sum_4bits(u1i *dst, b1i *src, u4i W){
 		u8i *s, t[WORDSIZE/8], *r, v;
 		u4i i, k, l, j;
 		memset(dst, 0, WORDSIZE);
@@ -1840,10 +1843,31 @@ static inline void striped_epi2_seqedit_row_merge(u2i sbegs[2], b1i *us[3][2], b
 			}
 		}
 	}
-	striped_seqedit_sum_4bits(rs[0], us[0][0]);
-	striped_seqedit_sum_4bits(rs[1], us[0][1]);
-	striped_seqedit_sum_4bits(rs[2], us[1][0]);
-	striped_seqedit_sum_4bits(rs[3], us[1][1]);
+
+// W <= 63
+// the size of hs[0/1/2] is WORDSIZE * 2
+// NOTE THAT THIS FUNCTION IS UN-FINISHED
+static inline void striped_epi2_seqedit_row_merge(u2i sbegs[2], b1i *us[3][2], b1i *hs[3], u1i W){
+	xint p1, p2, q1, q2, u1, u2, h1, h2, h3, h4;
+	u4i i;
+	b2i ts[3];
+	u1i rs[4][WORDSIZE];
+//#define CHECK_NO_SSE
+#ifdef CHECK_NO_SSE
+#define DEBUG_NO_SSE
+#endif
+#ifdef CHECK_NO_SSE
+	int ds[2][128];
+	memset(ds[0], 0, 128 * sizeof(int));
+	memset(ds[1], 0, 128 * sizeof(int));
+#endif
+	if(W > 63){
+		W = 63;
+	}
+	striped_seqedit_sum_4bits(rs[0], us[0][0], W);
+	striped_seqedit_sum_4bits(rs[1], us[0][1], W);
+	striped_seqedit_sum_4bits(rs[2], us[1][0], W);
+	striped_seqedit_sum_4bits(rs[3], us[1][1], W);
 	ts[0] = sbegs[0];
 	ts[1] = sbegs[1];
 	for(i=0;i<WORDSIZE*2;i++){
@@ -1900,73 +1924,6 @@ static inline void striped_epi2_seqedit_row_merge(u2i sbegs[2], b1i *us[3][2], b
 	}
 	sub_print_3hs(-1);
 #endif
-	__attribute__((unused)) void striped_epi2_seqedit_row_merge_core_2(const int shift){
-		xint MASK, ONES, A, B, S, C, D;
-		MASK = mm_set1_epi8(0x11);
-		ONES = mm_set1_epi8(0x0F);
-		C    = mm_set1_epi8(0x10);
-		D    = mm_set1_epi8(0x01);
-		for(i=0;i<W;i++){ // TODO: blocks of 7
-			q1 = mm_load(((xint*)us[0][0]) + i);
-			p1 = mm_load(((xint*)us[0][1]) + i);
-			h1 = mm_adds_epi8(h1, mm_and(mm_srli_epi64(p1, shift), MASK));
-			h1 = mm_subs_epi8(h1, mm_and(mm_srli_epi64(q1, shift), MASK));
-			q2 = mm_load(((xint*)us[1][0]) + i);
-			p2 = mm_load(((xint*)us[1][1]) + i);
-			h2 = mm_adds_epi8(h2, mm_and(mm_srli_epi64(p2, shift), MASK));
-			h2 = mm_subs_epi8(h2, mm_and(mm_srli_epi64(q2, shift), MASK));
-			u1 = mm_load(((xint*)us[2][0]) + i);
-			u2 = mm_load(((xint*)us[2][1]) + i);
-			// min epi4
-			A = mm_and(h1, ONES);
-			B = mm_and(h2, ONES);
-			S = mm_and(mm_adds_epi8(mm_andnot(A, ONES), B), C); // ((~A) + B) & 010
-			S = mm_srli_epi64(mm_subs_epi8(S, D), 4); // (S - 1) >> 4
-			S = mm_adds_epi8(mm_andnot(S, A), mm_and(S, B)); // ((~S) & A) + (S & B) -> min_epi4(A, B)
-			// (S - h3) -> {-1, 0, 1} -> {0xFF, 0x00, 0x01}
-			A = mm_subs_epi8(S, h3);
-			u1 = mm_or(u1, mm_slli_epi64(mm_and(mm_srli_epi64(A, 1), D), shift)); // bit2
-			u2 = mm_or(u2, mm_slli_epi64(mm_and(mm_xor(mm_srli_epi64(A, 2), A), D), shift)); // bit1 ^ bit3
-			h3 = S;
-
-			A = mm_and(mm_srli_epi64(h1, 4), ONES);
-			B = mm_and(mm_srli_epi64(h2, 4), ONES);
-			S = mm_and(mm_adds_epi8(mm_andnot(A, ONES), B), C); // ((~A) + B) & 010
-			S = mm_srli_epi64(mm_subs_epi8(S, D), 4); // (S - 1) >> 4 -> {0x00, 0x0F}
-			S = mm_adds_epi8(mm_andnot(S, A), mm_and(S, B)); // ((~S) & A) + (S & B) -> min_epi4(A, B)
-			// (S - h3) -> {-1, 0, 1} -> {0xFF, 0x00, 0x01}
-			A = mm_subs_epi8(S, h4);
-			u1 = mm_or(u1, mm_slli_epi64(mm_and(mm_srli_epi64(A, 1), D), shift + 4)); // bit2
-			u2 = mm_or(u2, mm_slli_epi64(mm_and(mm_xor(mm_srli_epi64(A, 2), A), D), shift + 4)); // bit1 ^ bit3
-			h4 = S;
-
-			mm_store(((xint*)us[2][0]) + i, u1);
-			mm_store(((xint*)us[2][1]) + i, u2);
-		}
-	}
-	void striped_epi2_seqedit_row_merge_core(const int shift){
-		xint MASK, SHFT;
-		MASK = mm_set1_epi8(1);
-		SHFT = mm_set1_epi8((short)(1 << shift));
-		for(i=0;i<W;i++){
-			q1 = mm_load(((xint*)us[0][0]) + i);
-			p1 = mm_load(((xint*)us[0][1]) + i);
-			h1 = mm_adds_epi8(h1, mm_and(mm_srli_epi64(p1, shift), MASK));
-			h1 = mm_subs_epi8(h1, mm_and(mm_srli_epi64(q1, shift), MASK));
-			q2 = mm_load(((xint*)us[1][0]) + i);
-			p2 = mm_load(((xint*)us[1][1]) + i);
-			h2 = mm_adds_epi8(h2, mm_and(mm_srli_epi64(p2, shift), MASK));
-			h2 = mm_subs_epi8(h2, mm_and(mm_srli_epi64(q2, shift), MASK));
-			h4 = mm_min_epi8(h1, h2);
-			u1 = mm_load(((xint*)us[2][0]) + i);
-			u2 = mm_load(((xint*)us[2][1]) + i);
-			u1 = mm_or(u1, mm_and(mm_cmpgt_epi8(h3, h4), SHFT));
-			u2 = mm_or(u2, mm_and(mm_cmpgt_epi8(h4, h3), SHFT));
-			h3 = h4;
-			mm_store(((xint*)us[2][0]) + i, u1);
-			mm_store(((xint*)us[2][1]) + i, u2);
-		}
-	}
 	striped_epi2_seqedit_row_merge_core(0);
 	striped_epi2_seqedit_row_merge_core(1);
 	striped_epi2_seqedit_row_merge_core(2);
@@ -3433,6 +3390,7 @@ static inline u4i banded_striped_epi8_seqalign_band_comb(u4i cnt, u4i *qoffs, in
 		s += num_diff(row[rx + i * W], row[rx + (i + 1) * W]);
 	}
 	s = num_max(2 * WORDSIZE / 2, s / (WORDSIZE - 1) / W * WORDSIZE / 2);
+    return s;
 }
 
 static inline void banded_striped_epi8_seqalign_row_print(FILE *out, u1i *qseq, u4i qlen, u4i tidx, u4i tpos, u1i tbase, u4i bandwidth, u4i mov, u4i rbeg, u4i rmax, int max_score, int *ubegs, b1i *us, b1i *es, int detail){

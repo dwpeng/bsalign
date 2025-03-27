@@ -4831,6 +4831,28 @@ static inline void fix_tenon_mortise_msa_bspoa2(BSPOA *g){
 	}
 }
 
+#define find_top2_bases(calc_n)\
+	memset(bcnts, 0, 6 * sizeof(u2i));\
+	for(rid=0;rid<nseq;rid++){\
+		if(col[rid] <= 4){\
+			bcnts[col[rid]] ++;\
+			bcnts[5] ++;\
+		}\
+	}\
+	if(bcnts[0] >= bcnts[1]){\
+		m1 = 0; m2 = 1;\
+	} else {\
+		m1 = 1; m2 = 0;\
+	}\
+	for(i=2;i<(calc_n? 5 : 4);i++){\
+		if(bcnts[i] > bcnts[m1]){\
+			m2 = m1;\
+			m1 = i;\
+		} else if(bcnts[i] > bcnts[m2]){\
+			m2 = i;\
+		}\
+	}
+
 static inline void tidy_msa_bspoa(BSPOA *g){
 	u4i nseq, nall, realnseq, mrow, mlen, i, pos, lpos, e, f;
 	u2i bcnts[6], rid, gap, lst;
@@ -4840,28 +4862,6 @@ static inline void tidy_msa_bspoa(BSPOA *g){
 	realnseq = (nseq && g->seqs->rdlens->size && g->seqs->rdlens->buffer[0])? nseq : nseq - 1;
 	mrow = nall + 3;
 	mlen = g->msaidxs->size;
-	void find_top2_bases(int calc_n){
-		memset(bcnts, 0, 6 * sizeof(u2i));
-		for(rid=0;rid<nseq;rid++){
-			if(col[rid] <= 4){
-				bcnts[col[rid]] ++;
-				bcnts[5] ++;
-			}
-		}
-		if(bcnts[0] >= bcnts[1]){
-			m1 = 0; m2 = 1;
-		} else {
-			m1 = 1; m2 = 0;
-		}
-		for(i=2;i<(calc_n? 5 : 4);i++){
-			if(bcnts[i] > bcnts[m1]){
-				m2 = m1;
-				m1 = i;
-			} else if(bcnts[i] > bcnts[m2]){
-				m2 = i;
-			}
-		}
-	}
 	bss = NULL; lst = 0; lc = 4; lq = 0; lpos = MAX_U4;
 	for(pos=0;pos<mlen;pos++){
 		col = g->msacols->buffer + g->msaidxs->buffer[pos] * mrow;
@@ -4940,28 +4940,6 @@ static inline void call_snvs_bspoa(BSPOA *g){
 	realnseq = (nseq && g->seqs->rdlens->size && g->seqs->rdlens->buffer[0])? nseq : nseq - 1;
 	mrow = nall + 3;
 	mlen = g->msaidxs->size;
-	void find_top2_bases(int calc_n){
-		memset(bcnts, 0, 6 * sizeof(u2i));
-		for(rid=0;rid<nseq;rid++){
-			if(col[rid] <= 4){
-				bcnts[col[rid]] ++;
-				bcnts[5] ++;
-			}
-		}
-		if(bcnts[0] >= bcnts[1]){
-			m1 = 0; m2 = 1;
-		} else {
-			m1 = 1; m2 = 0;
-		}
-		for(i=2;i<(calc_n? 5 : 4);i++){
-			if(bcnts[i] > bcnts[m1]){
-				m2 = m1;
-				m1 = i;
-			} else if(bcnts[i] > bcnts[m2]){
-				m2 = i;
-			}
-		}
-	}
 	// calc probs
 	pinc = 0.0005;
 	pcnt = 100;
