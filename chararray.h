@@ -20,7 +20,7 @@ typedef int string_size_t;
 #endif
 
 typedef struct {
-	union { char *string; char *buffer; };
+	char *string;
 	string_size_t size;
 	string_size_t capacity;
 } String;
