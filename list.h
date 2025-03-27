@@ -117,7 +117,7 @@ do {	\
 	\
 typedef struct {	\
 	e_type* buffer;	\
-	union { size_type size; size_type len; };	\
+	size_type size;	\
 	size_type cap;	\
 	size_type mem_zero:1, n_head:6, aligned:6, off:sizeof(size_type)*8-13;	\
 } list_type;	\
