@@ -21,21 +21,14 @@
 #include "sort.h"
 
 #ifdef __x86_64__
-#ifdef __SSE2__
+#ifdef __AVX2__
+#include <immintrin.h>
+#else
 #include <emmintrin.h>
-#endif
-
-#ifdef __SSE4_1__
 #include <smmintrin.h>
-#endif
-
-#ifdef __SSE4_2__
 #include <nmmintrin.h>
 #endif
 
-#ifdef __AVX2__
-#include <immintrin.h>
-#endif
 #elif defined(__aarch64__)
 #include "sse2neno.h"
 #else
