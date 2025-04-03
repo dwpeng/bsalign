@@ -4,11 +4,11 @@
  * Jue Ruan <ruanjue@gmail.com>
  *
  * References:
- * Myers,G. 1999. "A fast bit-vector algorithm for approximate string matching based on dynamic programming." J. ACM, 46, 395¨C41.
- * Farrar, Michael. 2007. "Striped Smith-Waterman Speeds Database Searches Six Times over Other SIMD Implementations." Bioinformatics 23 (2): 156¨C61.
+ * Myers,G. 1999. "A fast bit-vector algorithm for approximate string matching based on dynamic programming." J. ACM, 46, 395ï¿½C41.
+ * Farrar, Michael. 2007. "Striped Smith-Waterman Speeds Database Searches Six Times over Other SIMD Implementations." Bioinformatics 23 (2): 156ï¿½C61.
  * Suzuki, Hajime, and Masahiro Kasahara. 2017. "Acceleration of Nucleotide Semi-Global Alignment with Adaptive Banded Dynamic Programming" BioRxiv, September, 130633.
  * Suzuki, Hajime, and Masahiro Kasahara. 2018. "Introducing Difference Recurrence Relations for Faster Semi-Global Alignment of Long Sequences." BMC Bioinformatics 19 (Suppl 1).
- * Li, Heng. 2018. "Minimap2: Pairwise Alignment for Nucleotide Sequences." Bioinformatics 34 (18): 3094¨C3100.
+ * Li, Heng. 2018. "Minimap2: Pairwise Alignment for Nucleotide Sequences." Bioinformatics 34 (18): 3094ï¿½C3100.
  *
  * To use bsalign.h in your program, please copy bsalign.h, list.h, sort.h and mem_share.h together
  *
@@ -19,12 +19,27 @@
 
 #include "list.h"
 #include "sort.h"
+
+#ifdef __x86_64__
+#ifdef __SSE2__
+#include <emmintrin.h>
+#endif
+
+#ifdef __SSE4_1__
+#include <smmintrin.h>
+#endif
+
+#ifdef __SSE4_2__
+#include <nmmintrin.h>
+#endif
+
 #ifdef __AVX2__
 #include <immintrin.h>
+#endif
+#elif defined(__aarch64__)
+#include "sse2neno.h"
 #else
-#include <emmintrin.h>
-#include <smmintrin.h>
-#include <tmmintrin.h>
+#error "Please use x86_64 or aarch64"
 #endif
 
 #define SEQALIGN_MODE_GLOBAL	0
