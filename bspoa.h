@@ -3520,7 +3520,22 @@ static inline double cns_bspoa(BSPOA *g){
 					bs[a + 5][rid] = 0;
 				}
 				if(cnts[5] == 0 && a == 4){
-					dp[a]->sc[5] = 0;
+					for(e=0;e<=4;e++){
+						lp = dps[e] + pos - 1;
+						if(lp->sc[5] == BSPOA_MIN_LOGVAL){
+							errs[e] = BSPOA_MIN_LOGVAL;
+						} else {
+							errs[e] = lp->sc[5];
+						}
+						errs[e + 5] = errs[e];
+					}
+					dp[a]->sc[5] = sum_log_nums(5, errs + 5);
+					dp[a]->bt = 4;
+					for(e=0;e<4;e++){
+						if(errs[e] > errs[dp[a]->bt]) dp[a]->bt = e;
+					}
+					lp = dps[dp[a]->bt] + pos - 1;
+					dp[a]->lb = lp->lb;
 				}
 				continue;
 			}
