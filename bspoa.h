@@ -3510,7 +3510,7 @@ static inline double cns_bspoa(BSPOA *g){
 			}
 		}
 		for(a=0;a<=4;a++){
-			if(cnts[5] && cnts[a] == 0){
+			if(cnts[5] == 0 || (cnts[5] && cnts[a] == 0)){
 				for(i=0;i<6;i++){
 					dp[a]->sc[i] = BSPOA_MIN_LOGVAL;
 				}
@@ -3518,6 +3518,9 @@ static inline double cns_bspoa(BSPOA *g){
 				dp[a]->lb = 4;
 				for(rid=0;rid<nseq;rid++){
 					bs[a + 5][rid] = 0;
+				}
+				if(cnts[5] == 0 && a == 4){
+					dp[a]->sc[5] = 0;
 				}
 				continue;
 			}
