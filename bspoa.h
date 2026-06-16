@@ -297,6 +297,7 @@ static inline void renew_bspoa(BSPOA *g){
 	renew_bitvec(g->rdbits, 1024);
 	renew_bitvec(g->states, 1024);
 	renew_u8v(g->heap, 32);
+	renew_u8v(g->todels, 32);
 	renew_u4v(g->stack, 32);
 	renew_bspoaedgechgv(g->echgs, 32);
 	renew_u1v(g->msacols, 16 * 1024);
@@ -342,6 +343,7 @@ static inline void clear_bspoa(BSPOA *g){
 	clear_bitvec(g->rdbits);
 	clear_bitvec(g->states);
 	clear_u8v(g->heap);
+	clear_u8v(g->todels);
 	clear_u4v(g->stack);
 	clear_bspoaedgechgv(g->echgs);
 	clear_u1v(g->msacols);
