@@ -4,11 +4,11 @@
  * Jue Ruan <ruanjue@gmail.com>
  *
  * References:
- * Myers,G. 1999. "A fast bit-vector algorithm for approximate string matching based on dynamic programming." J. ACM, 46, 395¨C41.
- * Farrar, Michael. 2007. "Striped Smith-Waterman Speeds Database Searches Six Times over Other SIMD Implementations." Bioinformatics 23 (2): 156¨C61.
+ * Myers,G. 1999. "A fast bit-vector algorithm for approximate string matching based on dynamic programming." J. ACM, 46, 395ï¿½C41.
+ * Farrar, Michael. 2007. "Striped Smith-Waterman Speeds Database Searches Six Times over Other SIMD Implementations." Bioinformatics 23 (2): 156ï¿½C61.
  * Suzuki, Hajime, and Masahiro Kasahara. 2017. "Acceleration of Nucleotide Semi-Global Alignment with Adaptive Banded Dynamic Programming" BioRxiv, September, 130633.
  * Suzuki, Hajime, and Masahiro Kasahara. 2018. "Introducing Difference Recurrence Relations for Faster Semi-Global Alignment of Long Sequences." BMC Bioinformatics 19 (Suppl 1).
- * Li, Heng. 2018. "Minimap2: Pairwise Alignment for Nucleotide Sequences." Bioinformatics 34 (18): 3094¨C3100.
+ * Li, Heng. 2018. "Minimap2: Pairwise Alignment for Nucleotide Sequences." Bioinformatics 34 (18): 3094ï¿½C3100.
  *
  * To use bsalign.h in your program, please copy bsalign.h, list.h, sort.h and mem_share.h together
  *
@@ -97,7 +97,14 @@ typedef __m256i	xint;
 #define mm_srai_epi64	_mm256_srai_epi64
 #define mm_slli_epi64	_mm256_slli_epi64
 #define mm_slai_epi64	_mm256_slai_epi64
-#define mm_insert_epi8	_mm256_insert_epi8
+static inline xint _avx2_insert_epi8(xint a, int i, int idx){
+	__m128i lo = _mm256_castsi256_si128(a);
+	__m128i hi = _mm256_extracti128_si256(a, 1);
+	if(idx < 16) lo = _mm_insert_epi8(lo, i, idx);
+	else hi = _mm_insert_epi8(hi, i, idx - 16);
+	return _mm256_inserti128_si256(_mm256_castsi128_si256(lo), hi, 1);
+}
+#define mm_insert_epi8(a, i, idx) _avx2_insert_epi8(a, i, idx)
 #define mm_extract_epi16	_mm256_extract_epi16
 #define mm_extract_epi32	_mm256_extract_epi32
 #define mm_adds_epi8	_mm256_adds_epi8
@@ -126,13 +133,13 @@ typedef __m256i	xint;
 #define mm_shuffle	_mm256_shuffle_epi8
 #define mm_blendv	_mm256_blendv_epi8
 #define mm_cvtepi8x0_epi16(a)	_mm256_cvtepi8_epi16(_mm256_castsi256_si128(a))
-#define mm_cvtepi8x1_epi16(a)	_mm256_cvtepi8_epi16(_mm256_castsi256_si128(_mm256_srli_si256(a, 16)))
+#define mm_cvtepi8x1_epi16(a)	_mm256_cvtepi8_epi16(_mm256_extracti128_si256(a, 1))
 #define mm_cvtepi16x0_epi32(a)	_mm256_cvtepi16_epi32(_mm256_castsi256_si128(a))
-#define mm_cvtepi16x1_epi32(a)	_mm256_cvtepi16_epi32(_mm256_castsi256_si128(_mm256_srli_si256(a, 16)))
+#define mm_cvtepi16x1_epi32(a)	_mm256_cvtepi16_epi32(_mm256_extracti128_si256(a, 1))
 #define mm_cvtepi8x0_epi32(a)	_mm256_cvtepi8_epi32(_mm256_castsi256_si128(a))
-#define mm_cvtepi8x1_epi32(a)	_mm256_cvtepi8_epi16(_mm256_castsi256_si128(_mm256_srli_si256(a, 8)))
-#define mm_cvtepi8x2_epi32(a)	_mm256_cvtepi8_epi16(_mm256_castsi256_si128(_mm256_srli_si256(a, 16)))
-#define mm_cvtepi8x3_epi32(a)	_mm256_cvtepi8_epi16(_mm256_castsi256_si128(_mm256_srli_si256(a, 24)))
+#define mm_cvtepi8x1_epi32(a)	_mm256_cvtepi8_epi32(_mm_srli_si128(_mm256_castsi256_si128(a), 8))
+#define mm_cvtepi8x2_epi32(a)	_mm256_cvtepi8_epi32(_mm256_extracti128_si256(a, 1))
+#define mm_cvtepi8x3_epi32(a)	_mm256_cvtepi8_epi32(_mm_srli_si128(_mm256_extracti128_si256(a, 1), 8))
 #define mm_packs_epi32	_mm256_packs_epi32
 #define mm_packs_epi16	_mm256_packs_epi16
 
@@ -888,9 +895,18 @@ static inline int striped_seqedit_rowmin(int _sbeg, u8i *us[2], u4i W, u4i *when
 				mm[i] = mm_min_epi32(mm[i], d);
 				pp[i] = mm_blendv(pp[i], mm_add_epi32(mm_cvtepi8x0_epi32(p), mm_set1_epi32(ib)), c);
 				hh[i] = mm_add_epi32(hh[i], mm_cvtepi8x0_epi32(h));
+#ifdef __AVX2__
+				{ __m128i lo = _mm256_castsi256_si128(h), hi = _mm256_extracti128_si256(h, 1);
+				  h = _mm256_inserti128_si256(_mm256_castsi128_si256(_mm_or_si128(_mm_srli_si128(lo, 8), _mm_slli_si128(hi, 8))), _mm_srli_si128(hi, 8), 1); }
+				{ __m128i lo = _mm256_castsi256_si128(m), hi = _mm256_extracti128_si256(m, 1);
+				  m = _mm256_inserti128_si256(_mm256_castsi128_si256(_mm_or_si128(_mm_srli_si128(lo, 8), _mm_slli_si128(hi, 8))), _mm_srli_si128(hi, 8), 1); }
+				{ __m128i lo = _mm256_castsi256_si128(p), hi = _mm256_extracti128_si256(p, 1);
+				  p = _mm256_inserti128_si256(_mm256_castsi128_si256(_mm_or_si128(_mm_srli_si128(lo, 8), _mm_slli_si128(hi, 8))), _mm_srli_si128(hi, 8), 1); }
+#else
 				h = mm_srli(h, 4);
 				m = mm_srli(m, 4);
 				p = mm_srli(p, 4);
+#endif
 			}
 		}
 		for(i=0;i<4;i++){
@@ -1598,7 +1614,11 @@ static inline void striped_epi2_seqedit_row_cal(u4i rbeg, b1i *us[2][2], b1i *hs
 	UNUSED(mode);
 	BIT0 = mm_set1_epi8(0x00);
 	BIT1 = mm_set1_epi8(0xFF);
+#ifdef __AVX2__
+	BMSK = _mm256_set_epi32(1, 0, 0, 0, 0, 0, 0, 0);
+#else
 	BMSK = mm_srli(mm_set1_epi8(0x1), WORDSIZE - 1);
+#endif
 	v1 = BIT0;
 	v2 = BIT1;
 	for(i=0;i<W;i++){
@@ -2202,10 +2222,6 @@ static inline void banded_striped_epi8_seqalign_piecex_row_movx(b1i *us[2], b1i 
 	xint u, x, UBS[4], SHUFF1, SHUFF2;
 	u4i i, div, mov, cyc;
 	u1i shuff[WORDSIZE];
-#ifdef __AVX2__
-	fflush(stdout); fprintf(stderr, " -- Cannot work with AVX2 in %s -- %s:%d --\n", __FUNCTION__, __FILE__, __LINE__); fflush(stderr);
-	abort();
-#endif
 	banded_striped_epi8_seqalign_piecex_row_check_ubegs(us[1], ubegs[1], W);
 	if(movx >= W * WORDSIZE){
 		memset(us[0], 0, W * WORDSIZE);
@@ -2226,19 +2242,70 @@ static inline void banded_striped_epi8_seqalign_piecex_row_movx(b1i *us[2], b1i 
 		return;
 	}
 	cyc = movx / W;
-	for(i=0;i+cyc<WORDSIZE;i++) shuff[i] = i + cyc;
-	for(;i<WORDSIZE;i++) shuff[i] = 0xFF;
-	SHUFF1 = mm_load((xint*)shuff);
-	SHUFF2 = mm_srli(SHUFF1, 1);
-	SHUFF2 = mm_insert_epi8(SHUFF2, 0xFF, WORDSIZE - 1);
-	cyc = movx / W;
 	mov = movx % W;
 	div = W - mov;
 	//memcpy(ubegs[0], ubegs[1] + cyc, (WORDSIZE + 1 - cyc) * sizeof(int));
 	if(cyc){
+#ifdef __AVX2__
+		// AVX2: _mm256_shuffle_epi8 operates per 128-bit lane, can't cross lane boundary.
+		// For cyc >= 16: swap lanes then shuffle by cyc-16.
+		// For 1 <= cyc < 16: shuffle within lanes + carry from lane 1 to lane 0.
+		xint SHUFF1, SHUFF_CARRY;
+		if(cyc < 16){
+			for(i=0;i<16;i++) shuff[i] = (i + cyc < 16)? (i + cyc) : 0xFF;
+			for(i=16;i<32;i++) shuff[i] = (i - 16 + cyc < 16)? (i - 16 + cyc) : 0xFF;
+			SHUFF1 = mm_loadu((xint*)shuff);
+			for(i=0;i<16-cyc;i++) shuff[i] = 0xFF;
+			for(;i<16;i++) shuff[i] = i - (16 - cyc);
+			for(i=16;i<32;i++) shuff[i] = 0xFF;
+			SHUFF_CARRY = mm_loadu((xint*)shuff);
+		} else {
+			u4i sub = cyc - 16;
+			for(i=0;i<16;i++) shuff[i] = (i + sub < 16)? (i + sub) : 0xFF;
+			for(i=16;i<32;i++) shuff[i] = 0xFF;
+			SHUFF1 = mm_loadu((xint*)shuff);
+		}
 		for(i=0;i<div;i++){
 			u = mm_load(((xint*)us[1]) + i + mov);
-			u = mm_shuffle(u, SHUFF1); // shift cyc epi8
+			if(cyc >= 16){
+				u = _mm256_shuffle_epi8(_mm256_permute2x128_si256(u, u, 0x81), SHUFF1);
+			} else {
+				xint u_swap = _mm256_permute2x128_si256(u, u, 0x81);
+				u = _mm256_or_si256(_mm256_shuffle_epi8(u, SHUFF1), _mm256_shuffle_epi8(u_swap, SHUFF_CARRY));
+			}
+			mm_store(((xint*)us[0]) + i, u);
+		}
+		if(piecewise){
+			for(i=0;i<div;i++){
+				x = mm_load(((xint*)es[1]) + i + mov);
+				if(cyc >= 16){
+					x = _mm256_shuffle_epi8(_mm256_permute2x128_si256(x, x, 0x81), SHUFF1);
+				} else {
+					xint x_swap = _mm256_permute2x128_si256(x, x, 0x81);
+					x = _mm256_or_si256(_mm256_shuffle_epi8(x, SHUFF1), _mm256_shuffle_epi8(x_swap, SHUFF_CARRY));
+				}
+				mm_store(((xint*)es[0]) + i, x);
+			}
+		}
+		if(piecewise == 2){
+			for(i=0;i<div;i++){
+				x = mm_load(((xint*)qs[1]) + i + mov);
+				if(cyc >= 16){
+					x = _mm256_shuffle_epi8(_mm256_permute2x128_si256(x, x, 0x81), SHUFF1);
+				} else {
+					xint x_swap = _mm256_permute2x128_si256(x, x, 0x81);
+					x = _mm256_or_si256(_mm256_shuffle_epi8(x, SHUFF1), _mm256_shuffle_epi8(x_swap, SHUFF_CARRY));
+				}
+				mm_store(((xint*)qs[0]) + i, x);
+			}
+		}
+#else
+		for(i=0;i+cyc<WORDSIZE;i++) shuff[i] = i + cyc;
+		for(;i<WORDSIZE;i++) shuff[i] = 0xFF;
+		SHUFF1 = mm_load((xint*)shuff);
+		for(i=0;i<div;i++){
+			u = mm_load(((xint*)us[1]) + i + mov);
+			u = mm_shuffle(u, SHUFF1);
 			mm_store(((xint*)us[0]) + i, u);
 		}
 		if(piecewise){
@@ -2255,6 +2322,7 @@ static inline void banded_striped_epi8_seqalign_piecex_row_movx(b1i *us[2], b1i 
 				mm_store(((xint*)qs[0]) + i, x);
 			}
 		}
+#endif
 	} else {
 		memcpy(us[0], us[1] + mov * WORDSIZE, div * WORDSIZE);
 		if(piecewise){
@@ -2271,13 +2339,80 @@ static inline void banded_striped_epi8_seqalign_piecex_row_movx(b1i *us[2], b1i 
 			UBS[2] = mm_load(((xint*)ubegs[1]) + 2);
 			UBS[3] = mm_load(((xint*)ubegs[1]) + 3);
 		}
-		for(i=div;i<W;i++){
+#ifdef __AVX2__
+		{ // Build SHUFF2 and SHUFF_CARRY2 for shift by cyc+1
+		  u4i cy2 = cyc + 1;
+		  xint SHUFF2, SHUFF_CARRY2;
+		  if(cy2 < 16){
+			for(i=0;i<16;i++) shuff[i] = (i + cy2 < 16)? (i + cy2) : 0xFF;
+			for(i=16;i<32;i++) shuff[i] = (i - 16 + cy2 < 16)? (i - 16 + cy2) : 0xFF;
+			SHUFF2 = mm_loadu((xint*)shuff);
+			for(i=0;i<16-cy2;i++) shuff[i] = 0xFF;
+			for(;i<16;i++) shuff[i] = i - (16 - cy2);
+			for(i=16;i<32;i++) shuff[i] = 0xFF;
+			SHUFF_CARRY2 = mm_loadu((xint*)shuff);
+		  } else {
+			u4i sub = cy2 - 16;
+			for(i=0;i<16;i++) shuff[i] = (i + sub < 16)? (i + sub) : 0xFF;
+			for(i=16;i<32;i++) shuff[i] = 0xFF;
+			SHUFF2 = mm_loadu((xint*)shuff);
+		  }
+		  for(i=div;i<W;i++){
 			u = mm_load(((xint*)us[1]) + i - div);
 			UBS[0] = mm_add_epi32(UBS[0], mm_cvtepi8x0_epi32(u));
 			UBS[1] = mm_add_epi32(UBS[1], mm_cvtepi8x1_epi32(u));
 			UBS[2] = mm_add_epi32(UBS[2], mm_cvtepi8x2_epi32(u));
 			UBS[3] = mm_add_epi32(UBS[3], mm_cvtepi8x3_epi32(u));
-			u = mm_shuffle(u, SHUFF2); // shift cyc+1 epi8
+			if(cy2 >= 16){
+				u = _mm256_shuffle_epi8(_mm256_permute2x128_si256(u, u, 0x81), SHUFF2);
+			} else {
+				xint u_swap = _mm256_permute2x128_si256(u, u, 0x81);
+				u = _mm256_or_si256(_mm256_shuffle_epi8(u, SHUFF2), _mm256_shuffle_epi8(u_swap, SHUFF_CARRY2));
+			}
+			mm_store(((xint*)us[0]) + i, u);
+		  }
+		  {
+			mm_store(((xint*)ubegs[0]) + 0, UBS[0]);
+			mm_store(((xint*)ubegs[0]) + 1, UBS[1]);
+			mm_store(((xint*)ubegs[0]) + 2, UBS[2]);
+			mm_store(((xint*)ubegs[0]) + 3, UBS[3]);
+		  }
+		  if(piecewise){
+			for(i=div;i<W;i++){
+				x = mm_load(((xint*)es[1]) + i - div);
+				if(cy2 >= 16){
+					x = _mm256_shuffle_epi8(_mm256_permute2x128_si256(x, x, 0x81), SHUFF2);
+				} else {
+					xint x_swap = _mm256_permute2x128_si256(x, x, 0x81);
+					x = _mm256_or_si256(_mm256_shuffle_epi8(x, SHUFF2), _mm256_shuffle_epi8(x_swap, SHUFF_CARRY2));
+				}
+				mm_store(((xint*)es[0]) + i, x);
+			}
+		  }
+		  if(piecewise == 2){
+			for(i=div;i<W;i++){
+				x = mm_load(((xint*)qs[1]) + i - div);
+				if(cy2 >= 16){
+					x = _mm256_shuffle_epi8(_mm256_permute2x128_si256(x, x, 0x81), SHUFF2);
+				} else {
+					xint x_swap = _mm256_permute2x128_si256(x, x, 0x81);
+					x = _mm256_or_si256(_mm256_shuffle_epi8(x, SHUFF2), _mm256_shuffle_epi8(x_swap, SHUFF_CARRY2));
+				}
+				mm_store(((xint*)qs[0]) + i, x);
+			}
+		  }
+		}
+#else
+		for(i=div;i<W;i++){
+			u4i cyc1 = cyc + 1;
+			u = mm_load(((xint*)us[1]) + i - div);
+			UBS[0] = mm_add_epi32(UBS[0], mm_cvtepi8x0_epi32(u));
+			UBS[1] = mm_add_epi32(UBS[1], mm_cvtepi8x1_epi32(u));
+			UBS[2] = mm_add_epi32(UBS[2], mm_cvtepi8x2_epi32(u));
+			UBS[3] = mm_add_epi32(UBS[3], mm_cvtepi8x3_epi32(u));
+			{ u4i j; for(j=0;j+cyc1<WORDSIZE;j++) shuff[j] = j + cyc1; for(;j<WORDSIZE;j++) shuff[j] = 0xFF; }
+			SHUFF2 = mm_load((xint*)shuff);
+			u = mm_shuffle(u, SHUFF2);
 			mm_store(((xint*)us[0]) + i, u);
 		}
 		{
@@ -2288,18 +2423,25 @@ static inline void banded_striped_epi8_seqalign_piecex_row_movx(b1i *us[2], b1i 
 		}
 		if(piecewise){
 			for(i=div;i<W;i++){
+				u4i cyc1 = cyc + 1;
 				x = mm_load(((xint*)es[1]) + i - div);
+				{ u4i j; for(j=0;j+cyc1<WORDSIZE;j++) shuff[j] = j + cyc1; for(;j<WORDSIZE;j++) shuff[j] = 0xFF; }
+				SHUFF2 = mm_load((xint*)shuff);
 				x = mm_shuffle(x, SHUFF2);
 				mm_store(((xint*)es[0]) + i, x);
 			}
 		}
 		if(piecewise == 2){
 			for(i=div;i<W;i++){
+				u4i cyc1 = cyc + 1;
 				x = mm_load(((xint*)qs[1]) + i - div);
+				{ u4i j; for(j=0;j+cyc1<WORDSIZE;j++) shuff[j] = j + cyc1; for(;j<WORDSIZE;j++) shuff[j] = 0xFF; }
+				SHUFF2 = mm_load((xint*)shuff);
 				x = mm_shuffle(x, SHUFF2);
 				mm_store(((xint*)qs[0]) + i, x);
 			}
 		}
+#endif
 	}
 	{
 		u4i a, a2, b, b2, d;
@@ -2467,8 +2609,13 @@ static inline void banded_striped_epi8_seqalign_piecex_row_merge(b1i *us[3], b1i
 			s[0][1] = mm_sub_epi32(s[0][1], x[0][1]);
 			s[1][0] = mm_sub_epi32(s[1][0], x[1][0]);
 			s[1][1] = mm_sub_epi32(s[1][1], x[1][1]);
+#ifdef __AVX2__
+			t[0][0] = mm_packs_epi32(_mm256_permute2x128_si256(x[0][0], x[0][1], 0x20), _mm256_permute2x128_si256(x[0][0], x[0][1], 0x31));
+			t[1][0] = mm_packs_epi32(_mm256_permute2x128_si256(x[1][0], x[1][1], 0x20), _mm256_permute2x128_si256(x[1][0], x[1][1], 0x31));
+#else
 			t[0][0] = mm_packs_epi32(x[0][0], x[0][1]);
 			t[1][0] = mm_packs_epi32(x[1][0], x[1][1]);
+#endif
 			u[0] = mm_sub_epi32(s[0][2], s[1][2]);
 			u[0] = mm_max_epi32(u[0], mm_set1_epi32(-0x7FFF));
 			u[0] = mm_min_epi32(u[0], mm_set1_epi32( 0x7FFF));
@@ -2483,8 +2630,13 @@ static inline void banded_striped_epi8_seqalign_piecex_row_merge(b1i *us[3], b1i
 			s[0][3] = mm_sub_epi32(s[0][3], x[0][1]);
 			s[1][2] = mm_sub_epi32(s[1][2], x[1][0]);
 			s[1][3] = mm_sub_epi32(s[1][3], x[1][1]);
+#ifdef __AVX2__
+			t[0][1] = mm_packs_epi32(_mm256_permute2x128_si256(x[0][0], x[0][1], 0x20), _mm256_permute2x128_si256(x[0][0], x[0][1], 0x31));
+			t[1][1] = mm_packs_epi32(_mm256_permute2x128_si256(x[1][0], x[1][1], 0x20), _mm256_permute2x128_si256(x[1][0], x[1][1], 0x31));
+#else
 			t[0][1] = mm_packs_epi32(x[0][0], x[0][1]);
 			t[1][1] = mm_packs_epi32(x[1][0], x[1][1]);
+#endif
 			p = 0;
 			m[p][0] = mm_max_epi16(t[0][0], t[1][0]);
 			m[p][1] = mm_max_epi16(t[0][1], t[1][1]);
@@ -2504,6 +2656,9 @@ static inline void banded_striped_epi8_seqalign_piecex_row_merge(b1i *us[3], b1i
 			m[p][1]  = mm_max_epi16(t[0][1], t[1][1]);
 			m[!p][1] = mm_subs_epi16(m[p][1], m[!p][1]);
 			u[0] = mm_packs_epi16(m[!p][0], m[!p][1]);
+#ifdef __AVX2__
+			u[0] = _mm256_permute4x64_epi64(u[0], 0xD8);
+#endif
 			mm_store(((xint*)us[2]) + i, u[0]);
 #if 1
 			for(j=0;j<WORDSIZE;j++){
@@ -2534,6 +2689,9 @@ static inline void banded_striped_epi8_seqalign_piecex_row_merge(b1i *us[3], b1i
 			m[!p][1] = mm_max_epi16(x[0][1], x[1][1]);
 			m[!p][1] = mm_subs_epi16(m[!p][1], m[p][1]);
 			u[0] = mm_packs_epi16(m[!p][0], m[!p][1]);
+#ifdef __AVX2__
+			u[0] = _mm256_permute4x64_epi64(u[0], 0xD8);
+#endif
 			mm_store(((xint*)es[2]) + i, u[0]);
 			//c[0] = mm_packs_epi16(c[0], c[1]);
 			//c[0] = mm_blendv(mrk[0], mrk[1], c[0]);
@@ -2552,6 +2710,9 @@ static inline void banded_striped_epi8_seqalign_piecex_row_merge(b1i *us[3], b1i
 			m[!p][1] = mm_max_epi16(x[0][1], x[1][1]);
 			m[!p][1] = mm_subs_epi16(m[!p][1], m[p][1]);
 			u[0] = mm_packs_epi16(m[!p][0], m[!p][1]);
+#ifdef __AVX2__
+			u[0] = _mm256_permute4x64_epi64(u[0], 0xD8);
+#endif
 			mm_store(((xint*)qs[2]) + i, u[0]);
 			//c[0] = mm_packs_epi16(c[0], c[1]);
 			//c[0] = mm_blendv(mrk[0], mrk[1], c[0]);
@@ -2581,7 +2742,12 @@ static inline int banded_striped_epi8_seqalign_piecex_row_cal_tail_codes(xint h,
 	for(i=1;i<=WORDSIZE;i++){
 		ubegs[1][i] = ubegs[0][i] + fs[i - 1];
 	}
+#ifdef __AVX2__
+	{ __m128i lo = _mm256_castsi256_si128(v), hi = _mm256_extracti128_si256(v, 1);
+	  v = _mm256_inserti128_si256(_mm256_castsi128_si256(_mm_slli_si128(lo, 1)), _mm_or_si128(_mm_slli_si128(hi, 1), _mm_srli_si128(lo, 15)), 1); }
+#else
 	v = mm_slli(v, 1);
+#endif
 	u = mm_load(((xint*)us[1]) + 0);
 	u = mm_subs_epi8(u, v); // because I previously set v to zero, now update it, u(x, y) = h(x, y) - v(x - 1, y)
 	mm_store(((xint*)us[1]) + 0, u);
@@ -2595,7 +2761,12 @@ static inline int banded_striped_epi8_seqalign_piecex_row_cal_tail_codes(xint h,
 //__attribute__((always_inline))
 static inline xint banded_striped_epi8_seqalign_piecex_row_cal_FPenetration_codes(u4i W, xint f, b1i *fs, int *ubegs[2], b1i gape){
 	int i, s, t;
+#ifdef __AVX2__
+	{ __m128i lo = _mm256_castsi256_si128(f), hi = _mm256_extracti128_si256(f, 1);
+	  f = _mm256_inserti128_si256(_mm256_castsi128_si256(_mm_slli_si128(lo, 1)), _mm_or_si128(_mm_slli_si128(hi, 1), _mm_srli_si128(lo, 15)), 1); }
+#else
 	f = mm_slli(f, 1);
+#endif
 	mm_store((xint*)fs, f);
 	fs[0] = SEQALIGN_SCORE_EPI8_MIN;
 	t = W * gape;
