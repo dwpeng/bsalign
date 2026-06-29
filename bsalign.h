@@ -17,6 +17,16 @@
 #ifndef BAND_STRIPED_DNA_SEQ_ALIGNMENT_RJ_H
 #define BAND_STRIPED_DNA_SEQ_ALIGNMENT_RJ_H
 
+// Disable avx2
+#ifdef ENABLE_AVX2
+#else
+#undef __AVX2__
+#endif
+
+#ifdef __AVX2__
+#error "Not support avx2"
+#endif
+
 #include "list.h"
 #include "sort.h"
 #ifdef __AVX2__
